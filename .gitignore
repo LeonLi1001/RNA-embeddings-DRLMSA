@@ -1,0 +1,10 @@
+# Ignore Python cache folders
+__pycache__/
+*.py[cod]
+
+# Ignore model weights
+*.pth
+*.pt
+
+# macOS system files
+.DS_Store
