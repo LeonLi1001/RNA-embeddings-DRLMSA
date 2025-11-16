@@ -856,12 +856,12 @@ class AlignmentEnvironment:
 ####################################################################################################
 def suggest_hyperparams(trial):
     return {
-        "learning_rate": trial.suggest_loguniform("learning_rate", 1e-5, 1e-3),
-        "gamma": trial.suggest_uniform("gamma", 0.90, 0.999),
+        "learning_rate": trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True),
+        "gamma": trial.suggest_float("gamma", 0.90, 0.999),
         "batch_size": trial.suggest_categorical("batch_size", [32, 64, 128, 256]),
-        "epsilon_start": trial.suggest_uniform("epsilon_start", 0.8, 1.0),
-        "epsilon_end": trial.suggest_uniform("epsilon_end", 0.01, 0.2),
-        "epsilon_decay": trial.suggest_uniform("epsilon_decay", 0.995, 0.99999),
+        "epsilon_start": trial.suggest_float("epsilon_start", 0.8, 1.0),
+        "epsilon_end": trial.suggest_float("epsilon_end", 0.01, 0.2),
+        "epsilon_decay": trial.suggest_float("epsilon_decay", 0.995, 0.99999),
         # "hidden_size": trial.suggest_categorical("hidden_size", [64, 128, 256]),
         # "n_heads": trial.suggest_categorical("n_heads", [2, 4, 8]),
         # "target_update_freq": trial.suggest_categorical("target_update_freq", [100, 250, 500]),
@@ -912,6 +912,8 @@ def objective(trial):
     # --------------- MINI TRAINING LOOP -----------------
     for ep, sample in enumerate(samples):
 
+        print(f"Trial {trial.number} - Episode {ep+1}/{episodes_per_trial}")
+
         env = AlignmentEnvironment(
             sequences = sample["start"],
             total_gap = get_expected_gaps(sample),
@@ -945,6 +947,7 @@ def objective(trial):
 
         # ------- Optuna pruning: stop bad trials early -------
         if ep % 20 == 0:
+            print("Inside Optuna pruning check...")
             avg_recent = np.mean(reward_window[-20:])
             trial.report(avg_recent, ep)
             if trial.should_prune():
