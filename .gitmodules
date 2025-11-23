@@ -1,0 +1,3 @@
+[submodule "ERNIE_RNA"]
+	path = ERNIE_RNA
+	url = https://github.com/BasilJ-S/ERNIE-RNA.git
