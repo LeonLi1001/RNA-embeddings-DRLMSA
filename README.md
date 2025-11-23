@@ -51,4 +51,6 @@ to add a symlink into the renata DQN folder
 
 ## Download Pretrained Model
 
-Download from https://drive.google.com/drive/folders/10Yz-sdezhmazzVtrtdBGdzzqK1Z6f-Xv and place in `Renata-DQN/pretrained`
+### ERNIE-RNA
+
+Download from https://drive.google.com/drive/folders/10Yz-sdezhmazzVtrtdBGdzzqK1Z6f-Xv and place in `Renata-DQN/pretrained`.
