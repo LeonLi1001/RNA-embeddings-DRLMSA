@@ -20,7 +20,7 @@ from itertools import combinations
 from datetime import datetime
 import optuna
 import json
-from multimolecule import RnaTokenizer, RnaBertModel, RnaFmModel
+from multimolecule import RnaTokenizer, RnaBertModel, RnaFmModel, ErnieRnaModel
 import time
 import sys
 
@@ -288,6 +288,8 @@ class FMEncoder(nn.Module):
             self.encoder = RnaBertModel.from_pretrained(model_name)
         elif model_name == "multimolecule/rnafm":
             self.encoder = RnaFmModel.from_pretrained(model_name)
+        elif model_name == 'multimolecule/rnaernie':
+            self.encoder == ErnieRnaModel.from_pretrained(model_name)
         else:
             sys.exit(f'ERROR: Unknown model name {model_name}')
         self.hidden_size = self.encoder.config.hidden_size  # e.g. 120 for RNABERT
