@@ -20,8 +20,9 @@ from itertools import combinations
 from datetime import datetime
 import optuna
 import json
-from multimolecule import RnaTokenizer, RnaBertModel
+from multimolecule import RnaTokenizer, RnaBertModel, RnaFmModel
 import time
+import sys
 
 def masked_epsilon_greedy(q_values: torch.Tensor, valid_mask: np.ndarray, epsilon: float, rng=None) -> int:
     if q_values.ndim > 1:
@@ -283,7 +284,12 @@ class FMEncoder(nn.Module):
         self.max_sequence_length = max_sequence_length
         self.freeze_encoder = freeze_encoder
         self.tokenizer = RnaTokenizer.from_pretrained(model_name)
-        self.encoder = RnaBertModel.from_pretrained(model_name)
+        if model_name == 'multimolecule/rnabert':
+            self.encoder = RnaBertModel.from_pretrained(model_name)
+        elif model_name == "multimolecule/rnafm":
+            self.encoder = RnaFmModel.from_pretrained(model_name)
+        else:
+            sys.exit(f'ERROR: Unknown model name {model_name}')
         self.hidden_size = self.encoder.config.hidden_size  # e.g. 120 for RNABERT
         self.NUCLEOTIDE_MAP = {0: "<pad>", 1: "A", 2: "T", 3: "C", 4: "G"}
         print(f"Initialized FMEncoder with model {model_name} in {time.time() - start:.2f} seconds")
@@ -294,7 +300,7 @@ class FMEncoder(nn.Module):
         sequence = sequence.replace('', '')
         return sequence
 
-    def forward(self, src_seq):
+    def old_forward(self, src_seq):
         batch_size, num_seqs, seq_len = src_seq.shape
         
         start = time.time()
@@ -311,7 +317,7 @@ class FMEncoder(nn.Module):
             )
         else: 
             raise ValueError(f"Unknown embedding method: {self.embedding_method}")
-        print(f"Encoding took {time.time() - start:.4f} seconds")
+        # print(f"Encoding took {time.time() - start:.4f} seconds")
         
         start = time.time()
         # Process each sample in batch
@@ -337,9 +343,43 @@ class FMEncoder(nn.Module):
                 elif self.embedding_method == "last":
                     embedding = outputs.last_hidden_state[:, 1:-1, :]  # (1, hidden_size)
                     enc_output[b, s, :, :] = embedding.squeeze(0)
-        print(f"Forward pass encoding took {time.time() - start:.4f} seconds")
+        # print(f"Forward pass encoding took {time.time() - start:.4f} seconds")
 
         return enc_output # here enc_output shape can be (B, R, H) or (B, R, C, H) depending on embedding_method
+    
+    def forward(self, src_seq):
+        B, R, L = src_seq.shape
+        device = src_seq.device
+
+        strings = [
+            ''.join(self.NUCLEOTIDE_MAP[int(x)] for x in src_seq[b, r].tolist())
+            for b in range(B)
+            for r in range(R)
+        ]
+
+        batch_inputs = self.tokenizer(
+            strings,
+            padding=True,
+            return_tensors="pt"
+        ).to(device)
+
+        with torch.no_grad() if self.freeze_encoder else torch.enable_grad():
+            outputs = self.encoder(**batch_inputs)
+
+        hidden = outputs.last_hidden_state  # (B*R, L_tok, H)
+
+        if self.embedding_method == "cls":
+            enc = hidden[:, 0, :].reshape(B, R, self.hidden_size)
+
+        elif self.embedding_method == "last":
+            trimmed = hidden[:, 1:-1, :]
+            enc = trimmed.reshape(B, R, L, self.hidden_size)
+
+        else:
+            raise ValueError(f"Unknown embedding method {self.embedding_method}")
+
+        return enc
+
 
 class RNABERTQNetwork(nn.Module):
     def __init__(
@@ -972,9 +1012,9 @@ class AlignmentEnvironment:
 def train_full_model(fm_nm, embedding, hparams, 
                     train_samples,  
                     val_samples, 
-                    max_epochs=2, # 20,
-                    episodes_per_epoch=10, # 200,
-                    val_per_epoch=5) : # 50) :
+                    max_epochs=20, #2
+                    episodes_per_epoch=200, #10,
+                    val_per_epoch=50) : # 5) :
 
     # timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     run_dir = f"../result/{fm_nm}/"
@@ -1016,15 +1056,16 @@ def train_full_model(fm_nm, embedding, hparams,
         embedding_method = embedding,
     )
 
+    best_sp = float('-inf')
     # ---------------------- TRAINING LOOP ----------------------
-    for epoch in range(1, max_epochs + 1):
+    for epoch in tqdm(range(1, max_epochs + 1)):
 
         print(f"Starting epoch {epoch}...")
 
         episode_samples = random.sample(train_samples, episodes_per_epoch)
-        for sample in episode_samples:
+        for episode,sample in enumerate(episode_samples):
 
-            print(f"Starting episode:")
+            # print(f"Starting episode {episode}:")
 
             env = AlignmentEnvironment(
                 sequences=sample["start"],
@@ -1044,12 +1085,14 @@ def train_full_model(fm_nm, embedding, hparams,
                 next_mask = env.get_valid_action_mask()
 
                 agent.replay_memory.store((state, next_state, action, reward, done, next_mask))
-                agent.update()
+                if t % 10 == 0:
+                    # update every 10 steps instead
+                    agent.update()
 
                 state = next_state
                 valid_mask = next_mask
                 if done:
-                    print(f"#################################################################Episode finished early at step {t}.")
+                    # print(f"#################################################################Episode finished early at step {t}.")
                     break
 
             agent.update_epsilon()
@@ -1098,9 +1141,12 @@ def train_full_model(fm_nm, embedding, hparams,
             })
 
         print(f"Epoch {epoch} validation SP={avg_metrics['pred_sp']:.2f}, Q_acc={avg_metrics['Q_acc']:.3f}")
+        if avg_metrics['pred_sp'] >= best_sp:
+            temp_path = os.path.join(run_dir, f"{embedding}_epoch{epoch}_model.pt")
+            agent.save_model(temp_path)
 
     # ---------------------- SAVE MODEL ----------------------
-    # agent.save_model(model_path)
+    agent.save_model(model_path)
     print(f"Model saved to {model_path}")
     print(f"Metrics log saved to {log_path}")
     print(f"Sequence log saved to {seq_path}")
@@ -1111,6 +1157,13 @@ def train_full_model(fm_nm, embedding, hparams,
 #### Optuna Optimization ####
 ####################################################################################################
 if __name__ == "__main__":
+    # USER-SPECIFIC
+    dataset_path = "dotan1111/MSA-nuc-3-seq"
+    model_name = 'multimolecule/rnafm'
+    # embedding_method = 'last' #'cls'
+    embedding_method = 'cls'
+    top_hyperparams = "top5_hyperparams.json"
+
     # Setup
     project_root = Path.cwd().parent if Path.cwd().name == 'notebooks' else Path.cwd()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -1129,27 +1182,25 @@ if __name__ == "__main__":
 
     # --- Load and filter datasets ---
     start = time.time()
-    ds = load_dataset("dotan1111/MSA-nuc-3-seq", split="train")
+    ds = load_dataset(dataset_path, split="train")
     ds = ds.filter(filter_by_seq_length)
     train_samples = convert_huggingface_to_samples(ds, max_samples=training_size)
 
-    ds = load_dataset("dotan1111/MSA-nuc-3-seq", split="validation")
+    ds = load_dataset(dataset_path, split="validation")
     ds = ds.filter(filter_by_seq_length)
     val_samples = convert_huggingface_to_samples(ds)
     print(f"Training samples: {len(train_samples)}, Validation samples: {len(val_samples)}")
 
-    ds = load_dataset("dotan1111/MSA-nuc-3-seq", split="test")
+    ds = load_dataset(dataset_path, split="test")
     ds = ds.filter(filter_by_seq_length)
     test_samples = convert_huggingface_to_samples(ds) 
     print(f"loading the data took {time.time() - start:.2f} seconds.")
 
-    best_trials = json.load(open("../result/full_runs/top5_hyperparams.json", "r"))
+    best_trials = json.load(open(top_hyperparams, "r"))
 
     best_params = best_trials[0]["params"]
 
     print(f"Begin training the model with the best hyperparameters: {best_params}")
-    model_name = 'rnafm_local'
-    embedding_method = 'last' #'cls'
     sp = train_full_model(model_name, embedding_method, best_params, train_samples, val_samples)
     print(f"Final validation SP score from training: {sp}")
 

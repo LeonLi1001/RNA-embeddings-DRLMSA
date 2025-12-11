@@ -9,6 +9,9 @@ __pycache__/
 # macOS system files
 .DS_Store
 
+# preloaded models
 Renata-DQN/ERNIE_RNA
+RNA-FM/
 
-RNA-FM
+# hyperparam configuration
+Renata-DQN/top5_hyperparams.json

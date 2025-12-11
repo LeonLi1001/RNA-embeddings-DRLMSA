@@ -1,0 +1,15 @@
+name: rnabert-env
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.10
+  - numpy
+  - matplotlib
+  - pytorch
+  - tqdm
+  - datasets
+  - optuna
+  - pip
+  - pip:
+      - multimolecule
