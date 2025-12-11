@@ -1167,6 +1167,18 @@ if __name__ == "__main__":
     embedding_method = 'cls'
     top_hyperparams = "top5_hyperparams.json"
 
+    # Seed for reproductibility
+    SEED = 42
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+    torch.cuda.manual_seed_all(SEED)
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True)
+    os.environ["PYTHONHASHSEED"] = str(SEED)
+
     # Setup
     project_root = Path.cwd().parent if Path.cwd().name == 'notebooks' else Path.cwd()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
