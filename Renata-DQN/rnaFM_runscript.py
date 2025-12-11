@@ -289,7 +289,7 @@ class FMEncoder(nn.Module):
         elif model_name == "multimolecule/rnafm":
             self.encoder = RnaFmModel.from_pretrained(model_name)
         elif model_name == 'multimolecule/rnaernie':
-            self.encoder == ErnieRnaModel.from_pretrained(model_name)
+            self.encoder = ErnieRnaModel.from_pretrained(model_name)
         else:
             sys.exit(f'ERROR: Unknown model name {model_name}')
         self.hidden_size = self.encoder.config.hidden_size  # e.g. 120 for RNABERT
@@ -1162,9 +1162,10 @@ def train_full_model(fm_nm, embedding, hparams,
 if __name__ == "__main__":
     # USER-SPECIFIC
     dataset_path = "dotan1111/MSA-nuc-3-seq"
-    model_name = 'multimolecule/rnafm'
-    # embedding_method = 'last' #'cls'
-    embedding_method = 'cls'
+    # model_name = 'multimolecule/rnafm'
+    model_name = 'multimolecule/rnaernie'
+    embedding_method = 'last' #'cls'
+    # embedding_method = 'cls'
     top_hyperparams = "top5_hyperparams.json"
 
     # Seed for reproductibility
