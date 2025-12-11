@@ -1146,6 +1146,7 @@ def train_full_model(fm_nm, embedding, hparams,
         if avg_metrics['pred_sp'] >= best_sp:
             temp_path = os.path.join(run_dir, f"{embedding}_epoch{epoch}_model.pt")
             agent.save_model(temp_path)
+            best_sp = avg_metrics['pred_sp']
 
     # ---------------------- SAVE MODEL ----------------------
     agent.save_model(model_path)
